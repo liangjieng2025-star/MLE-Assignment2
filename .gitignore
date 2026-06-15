@@ -1,0 +1,44 @@
+# --- Generated data (regenerable by the pipeline) ---
+datamart/
+
+# --- Raw data: usually too large for GitHub. ---
+# NOTE: the assignment SUBMISSION zip must still include data/ and datamart/.
+# Keep them out of git, but add them back when you build the final zip.
+data/*.csv
+
+# --- Model bank: keep the artifact if small; comment out to track it ---
+# model_bank/*.pkl
+
+# --- Credentials / secrets ---
+fernet_key.txt
+
+# --- Old A1 reference folders (data CSVs, classmate PDFs, duplicate code) ---
+Data Pipeline/
+ML Pipeline/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# --- Spark / logs ---
+spark-warehouse/
+metastore_db/
+derby.log
+logs/
+*.log
+
+# --- Airflow local state ---
+airflow.db
+airflow.cfg
+airflow_data/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

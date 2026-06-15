@@ -2,7 +2,7 @@ from datetime import datetime
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
-# ── pipeline constants ────────────────────────────────────────────────────────
+# pipeline constants 
 
 # All 24 monthly snapshots the pipeline covers (2023-01-01 → 2024-12-01)
 _DATES = (
@@ -15,7 +15,7 @@ _DATES = (
 _MODEL      = "credit_model_2024_09_01.pkl"
 _TRAIN_DATE = "2024-09-01"
 
-# ── bash command templates ────────────────────────────────────────────────────
+# bash command templates 
 # $D is intentionally NOT a Python placeholder — it is a bash variable and
 # must survive .format() substitution unchanged.  Only {dates} and {model}
 # are replaced by Python.
@@ -40,7 +40,7 @@ for D in {dates}; do
 done
 """.format(dates=_DATES, model=_MODEL)
 
-# ── DAG definition ────────────────────────────────────────────────────────────
+# DAG definition
 
 with DAG(
     dag_id="loan_default_ml_pipeline",
@@ -56,7 +56,7 @@ with DAG(
     default_args={"owner": "airflow", "retries": 0},
 ) as dag:
 
-    # ── Task 1: bronze → silver → gold datamart (all 24 months) ──────────────
+    # Task 1: bronze → silver → gold datamart (all 24 months)
     # Also regenerates sign-fixed silver_fin + gold_cust_fin_risk partitions.
     build_datamart = BashOperator(
         task_id="build_datamart",
@@ -67,7 +67,7 @@ with DAG(
         ),
     )
 
-    # ── Task 2: train 3 candidates, select best by OOT AUC, write model_bank ─
+    # Task 2: train 3 candidates, select best by OOT AUC, write model bank
     train_select = BashOperator(
         task_id="train_select",
         bash_command=(
@@ -77,19 +77,19 @@ with DAG(
         ).format(td=_TRAIN_DATE),
     )
 
-    # ── Task 3: score all 24 monthly snapshots → gold predictions table ───────
+    # Task 3: score all 24 monthly snapshots → gold predictions table 
     inference_backfill = BashOperator(
         task_id="inference_backfill",
         bash_command=_INFERENCE_CMD,
     )
 
-    # ── Task 4: AUC/Gini + PSI for all 24 months → gold monitoring table ──────
+    # Task 4: AUC/Gini + PSI for all 24 months → gold monitoring table 
     monitoring_backfill = BashOperator(
         task_id="monitoring_backfill",
         bash_command=_MONITORING_CMD,
     )
 
-    # ── Task 5: 4 monitoring PNGs → monitoring_plots/ ─────────────────────────
+    # Task 5: 4 monitoring PNGs → monitoring_plots/ 
     visualise = BashOperator(
         task_id="visualise",
         bash_command=(
@@ -99,5 +99,5 @@ with DAG(
         ).format(model=_MODEL),
     )
 
-    # ── Linear chain ──────────────────────────────────────────────────────────
+    #  Linear chain 
     build_datamart >> train_select >> inference_backfill >> monitoring_backfill >> visualise

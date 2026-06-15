@@ -17,7 +17,7 @@ def main(modelname, output_dir="monitoring_plots"):
     model_name_no_ext = modelname.replace(".pkl", "")
     monitoring_dir    = os.path.join("datamart", "gold", "model_monitoring", model_name_no_ext)
 
-    # ── load full monitoring table (one plain parquet per month) ─────────────
+    # load full monitoring table (one plain parquet per month)
     files = sorted(glob.glob(
         os.path.join(monitoring_dir, "{}_monitoring_*.parquet".format(model_name_no_ext))
     ))
@@ -39,7 +39,7 @@ def main(modelname, output_dir="monitoring_plots"):
     plt.rcParams.update({"font.size": 11, "axes.titlepad": 10})
 
 
-    # ── Plot 1: Performance over time (AUC & Gini) ───────────────────────────
+    # Plot 1: Performance over time (AUC & Gini) 
     fig, ax = plt.subplots(figsize=(13, 5))
 
     valid = df[df["auc"].notna()].copy()
@@ -70,7 +70,7 @@ def main(modelname, output_dir="monitoring_plots"):
     print("Saved: {}".format(p1))
 
 
-    # ── Plot 2: Score distribution stability (PSI) ───────────────────────────
+    # Plot 2: Score distribution stability (PSI) 
     fig, ax = plt.subplots(figsize=(13, 5))
 
     psi_valid = df[df["psi"].notna()].copy()
@@ -103,7 +103,7 @@ def main(modelname, output_dir="monitoring_plots"):
     print("Saved: {}".format(p2))
 
 
-    # ── Plot 3: Coverage sanity (n_scored + actual_bad_rate) ─────────────────
+    # Plot 3: Coverage sanity (n_scored + actual_bad_rate) 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 8), sharex=True,
                                    gridspec_kw={"hspace": 0.12})
 
@@ -135,7 +135,7 @@ def main(modelname, output_dir="monitoring_plots"):
     print("Saved: {}".format(p3))
 
 
-    # ── Plot 4: Score drift (mean predicted probability) ─────────────────────
+    # Plot 4: Score drift (mean predicted probability) 
     fig, ax = plt.subplots(figsize=(13, 5))
 
     ax.plot(df["snapshot_date"], df["mean_pred"],

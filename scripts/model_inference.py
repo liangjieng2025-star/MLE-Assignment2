@@ -30,17 +30,17 @@ from sklearn.model_selection import train_test_split
 def main(snapshotdate, modelname):
     print('\n\n---starting job---\n\n')
     
-    # Initialize SparkSession
+    # Initialise SparkSession
     spark = pyspark.sql.SparkSession.builder \
         .appName("dev") \
         .master("local[*]") \
         .getOrCreate()
     
-    # Set log level to ERROR to hide warnings
+    # Set log level to error to hide warnings
     spark.sparkContext.setLogLevel("ERROR")
 
     
-    # --- set up config ---
+    # confiq setup
     config = {}
     config["snapshot_date_str"] = snapshotdate
     config["snapshot_date"] = datetime.strptime(config["snapshot_date_str"], "%Y-%m-%d")
@@ -51,7 +51,7 @@ def main(snapshotdate, modelname):
     pprint.pprint(config)
     
 
-    # --- load model artefact from model bank ---
+    # load model artefact from model bank 
     # Load the model from the pickle file
     with open(config["model_artefact_filepath"], 'rb') as file:
         model_artefact = pickle.load(file)
@@ -59,7 +59,7 @@ def main(snapshotdate, modelname):
     print("Model loaded successfully! " + config["model_artefact_filepath"])
 
 
-    # --- load feature store ---
+    # load feature store
     feature_location = "data/feature_clickstream.csv"
     
     # Load CSV into DataFrame - connect to feature store
@@ -74,7 +74,7 @@ def main(snapshotdate, modelname):
     features_pdf = features_sdf.toPandas()
 
 
-    # --- preprocess data for modeling ---
+    # preprocessing
     # prepare X_inference
     feature_cols = [fe_col for fe_col in features_pdf.columns if fe_col.startswith('fe_')]
     X_inference = features_pdf[feature_cols]
@@ -86,7 +86,7 @@ def main(snapshotdate, modelname):
     print('X_inference', X_inference.shape[0])
 
 
-    # --- model prediction inference ---
+    # model inference
     # load model
     model = model_artefact["model"]
     
@@ -99,8 +99,8 @@ def main(snapshotdate, modelname):
     y_inference_pdf["model_predictions"] = y_inference
     
 
-    # --- save model inference to datamart gold table ---
-    # create bronze datalake
+    # save model inference results to datalake - gold layer
+    # create bronze layer
     gold_directory = f"datamart/gold/model_predictions/{config['model_name'][:-4]}/"
     print(gold_directory)
     
@@ -116,7 +116,7 @@ def main(snapshotdate, modelname):
     print('saved to:', filepath)
 
     
-    # --- end spark session --- 
+    # end spark session 
     spark.stop()
     
     print('\n\n---completed job---\n\n')

@@ -13,7 +13,7 @@ EPSILON = 1e-6
 N_BINS  = 10
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# helpers
 
 def _to_date_str(col):
     """Coerce any snapshot_date representation to YYYY-MM-DD strings."""
@@ -97,8 +97,7 @@ def _null_row(snapshotdate, model_name_no_ext):
     }])
 
 
-# ── main ─────────────────────────────────────────────────────────────────────
-
+# main
 def main(snapshotdate, modelname, referencedate):
     print("\n\n---starting job---\n\n")
 
@@ -120,7 +119,7 @@ def main(snapshotdate, modelname, referencedate):
         "{}_monitoring_{}.parquet".format(model_name_no_ext, date_slug),
     )
 
-    # ── predictions for this snapshot ───────────────────────────────────────
+    # predictions
     pred_df = _load_predictions(model_name_no_ext, snapshotdate)
 
     # F — write null row instead of crashing when predictions are absent/empty
@@ -141,7 +140,7 @@ def main(snapshotdate, modelname, referencedate):
     mean_pred = float(pred_df["model_predictions"].mean())
     print("n_scored: {}  mean_pred: {:.4f}".format(n_scored, mean_pred))
 
-    # ── PSI vs reference ────────────────────────────────────────────────────
+    # PSI vs reference
     psi = None
     if snapshotdate == referencedate:
         print("snapshot == reference date -> PSI = null")
@@ -160,7 +159,7 @@ def main(snapshotdate, modelname, referencedate):
             )
             print("PSI vs {}: {:.4f}".format(referencedate, psi))
 
-    # ── label store ─────────────────────────────────────────────────────────
+    # label store
     label_parts = sorted(
         glob.glob(
             os.path.join(
@@ -179,7 +178,7 @@ def main(snapshotdate, modelname, referencedate):
     else:
         labels_snap = pd.DataFrame(columns=["Customer_ID", "snapshot_date", "label"])
 
-    # ── performance metrics ─────────────────────────────────────────────────
+    # performance metrics vs labels
     auc             = None
     gini            = None
     n_labeled       = 0
@@ -221,7 +220,7 @@ def main(snapshotdate, modelname, referencedate):
         )
     )
 
-    # ── save gold monitoring row ─────────────────────────────────────────────
+    # save gold monitoring row
     result_df = pd.DataFrame([{
         "snapshot_date":   snapshotdate,
         "model_name":      model_name_no_ext,

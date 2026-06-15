@@ -24,7 +24,7 @@ import xgboost as xgb
 # python scripts/model_train.py --snapshotdate "2024-09-01"
 
 
-# ── helper ────────────────────────────────────────────────────────────────────
+# helper functions
 
 def _evaluate_candidate(model, X_tr, y_tr, X_te, y_te, X_ot, y_ot):
     """Return dict with train/test/OOT AUC and Gini for a fitted model."""
@@ -41,13 +41,12 @@ def _evaluate_candidate(model, X_tr, y_tr, X_te, y_te, X_ot, y_ot):
     }
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
-
+# main code
 def main(snapshotdate, modelname):
-    print('\n\n---starting job---\n\n')
+    print('\n\nstarting job\n\n')
     os.chdir("/opt/airflow")
 
-    # Initialize SparkSession
+    # initialise SparkSession
     spark = pyspark.sql.SparkSession.builder \
         .appName("dev") \
         .master("local[*]") \
@@ -55,7 +54,7 @@ def main(snapshotdate, modelname):
     spark.sparkContext.setLogLevel("ERROR")
 
 
-    # --- set up config ---
+    # confiq set up
     train_test_period_months = 12
     oot_period_months = 2
     train_test_ratio = 0.8
@@ -80,7 +79,7 @@ def main(snapshotdate, modelname):
     pprint.pprint(config)
 
 
-    # --- load label store ---
+    # load label store
     folder_path = "datamart/gold/label_store/"
     files_list = [folder_path + os.path.basename(f) for f in glob.glob(os.path.join(folder_path, "*"))]
     label_store_sdf = spark.read.option("header", "true").parquet(*files_list)
@@ -94,7 +93,7 @@ def main(snapshotdate, modelname):
           config["train_test_start_date"], config["oot_end_date"])
 
 
-    # --- load feature store ---
+    # load feature store
     feature_location = "data/feature_clickstream.csv"
     features_store_sdf = spark.read.csv(feature_location, header=True, inferSchema=True)
     print("feature_store row_count:", features_store_sdf.count())
@@ -107,12 +106,12 @@ def main(snapshotdate, modelname):
           config["train_test_start_date"], config["oot_end_date"])
 
 
-    # --- join labels and features ---
+    # joining labels to features
     data_pdf = labels_sdf.join(features_sdf, on=["Customer_ID", "snapshot_date"], how="left").toPandas()
     feature_cols = [c for c in data_pdf.columns if c.startswith("fe_")]
 
 
-    # --- time-based split: OOT is the most recent window ---
+    # time-based split with OOT for most recent window
     oot_pdf = data_pdf[
         (data_pdf["snapshot_date"] >= config["oot_start_date"].date()) &
         (data_pdf["snapshot_date"] <= config["oot_end_date"].date())
@@ -142,7 +141,7 @@ def main(snapshotdate, modelname):
     print("y_oot   bad rate", round(float(y_oot.mean()),   2))
 
 
-    # --- preprocess: fit scaler on X_train only, transform all splits ---
+    # preprocess with fit scaler on X_train only, and transform all splits
     scaler = StandardScaler()
     transformer_stdscaler = scaler.fit(X_train)
 
@@ -150,8 +149,8 @@ def main(snapshotdate, modelname):
     X_test_sc  = transformer_stdscaler.transform(X_test)
     X_oot_sc   = transformer_stdscaler.transform(X_oot)
 
-    # ── Candidate 1: Logistic Regression (linear baseline) ───────────────────
-    print("\n--- Candidate 1: LogisticRegression ---")
+    # Logistic Regression model
+    print("\nLogisticRegression ")
     lr_model = LogisticRegression(
         C=1.0,
         max_iter=1000,
@@ -165,8 +164,7 @@ def main(snapshotdate, modelname):
     print("  Train AUC {auc_train}  Test AUC {auc_test}  OOT AUC {auc_oot}".format(**lr_metrics))
 
 
-    # ── Candidate 2: Random Forest (bagging ensemble) ─────────────────────────
-    print("\n--- Candidate 2: RandomForestClassifier ---")
+    # Random Forest
     rf_param_dist = {
         "n_estimators":     [50, 100, 200],
         "max_depth":        [3, 5, 7, None],
@@ -191,8 +189,8 @@ def main(snapshotdate, modelname):
     print("  Train AUC {auc_train}  Test AUC {auc_test}  OOT AUC {auc_oot}".format(**rf_metrics))
 
 
-    # ── Candidate 3: XGBoost + RandomizedSearchCV ────────────────────────────
-    print("\n--- Candidate 3: XGBoost + RandomizedSearchCV ---")
+    # XGBoost
+    print("\nXGBoost with RandomizedSearchCV ")
     xgb_clf = xgb.XGBClassifier(eval_metric="logloss", random_state=88)
     xgb_param_dist = {
         "n_estimators":     [25, 50],
@@ -223,7 +221,7 @@ def main(snapshotdate, modelname):
     print("  Train AUC {auc_train}  Test AUC {auc_test}  OOT AUC {auc_oot}".format(**xgb_metrics))
 
 
-    # ── Model selection: winner by OOT AUC ───────────────────────────────────
+    # Model Selection based on OOT AUC, with comparison table
     candidates = [
         {"name": "LogisticRegression", "model": lr_model, "hp": lr_hp, "metrics": lr_metrics},
         {"name": "RandomForest",        "model": rf_model, "hp": rf_hp, "metrics": rf_metrics},
@@ -238,7 +236,7 @@ def main(snapshotdate, modelname):
     )
     sep = "-" * len(header)
     print("\n" + sep)
-    print("MODEL SELECTION — evaluation on train / test / OOT splits")
+    print("Model Selection — evaluation on train / test / OOT splits")
     print(sep)
     print(header)
     print(sep)
@@ -257,7 +255,7 @@ def main(snapshotdate, modelname):
     print(sep + "\n")
 
 
-    # ── Build artifact — keys match model_inference.py expectations ───────────
+    # Build model artefact with metadata, and save to model bank
     best_model  = winner["model"]
     best_metrics = winner["metrics"]
 
@@ -298,7 +296,7 @@ def main(snapshotdate, modelname):
     pprint.pprint({k: v for k, v in model_artefact.items() if k != "model"})
 
 
-    # --- save artifact to model bank ---
+    # save artefact to model bank with version name
     if not os.path.exists(config["model_bank_directory"]):
         os.makedirs(config["model_bank_directory"])
 
@@ -308,7 +306,7 @@ def main(snapshotdate, modelname):
     print("Model saved to {}".format(file_path))
 
 
-    # --- end spark session ---
+    # end
     spark.stop()
     print('\n\n---completed job---\n\n')
 

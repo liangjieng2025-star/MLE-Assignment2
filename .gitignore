@@ -12,6 +12,10 @@ data/*.csv
 # --- Credentials / secrets ---
 fernet_key.txt
 
+# --- AI / Claude Code project files (local only, not for submission) ---
+CLAUDE.md
+.claude/
+
 # --- Old A1 reference folders (data CSVs, classmate PDFs, duplicate code) ---
 Data Pipeline/
 ML Pipeline/

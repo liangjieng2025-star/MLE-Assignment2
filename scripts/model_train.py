@@ -14,7 +14,7 @@ from pyspark.sql.types import StringType, IntegerType, FloatType, DateType
 
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import roc_auc_score, make_scorer
+from sklearn.metrics import roc_auc_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 
@@ -150,9 +150,6 @@ def main(snapshotdate, modelname):
     X_test_sc  = transformer_stdscaler.transform(X_test)
     X_oot_sc   = transformer_stdscaler.transform(X_oot)
 
-    auc_scorer = make_scorer(roc_auc_score)
-
-
     # ── Candidate 1: Logistic Regression (linear baseline) ───────────────────
     print("\n--- Candidate 1: LogisticRegression ---")
     lr_model = LogisticRegression(
@@ -179,7 +176,7 @@ def main(snapshotdate, modelname):
     rf_search = RandomizedSearchCV(
         estimator=RandomForestClassifier(random_state=88, class_weight="balanced"),
         param_distributions=rf_param_dist,
-        scoring=auc_scorer,
+        scoring="roc_auc",
         n_iter=20,
         cv=3,
         verbose=1,
@@ -211,7 +208,7 @@ def main(snapshotdate, modelname):
     xgb_search = RandomizedSearchCV(
         estimator=xgb_clf,
         param_distributions=xgb_param_dist,
-        scoring=auc_scorer,
+        scoring="roc_auc",
         n_iter=100,
         cv=3,
         verbose=1,

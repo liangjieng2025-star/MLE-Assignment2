@@ -93,15 +93,15 @@ def draw_architecture():
     ax.set_ylim(0, 1)
     ax.axis("off")
 
-    # outer Docker/Airflow frame
+    # outer Docker/Airflow frame — top at y=0.93 so title has clearance
     frame = mpatches.FancyBboxPatch(
-        (0.01, 0.01), 0.98, 0.95,
+        (0.01, 0.01), 0.98, 0.92,
         boxstyle="round,pad=0.01",
         facecolor=BG, edgecolor=BLU, linewidth=2.2,
         linestyle="--", zorder=1,
     )
     ax.add_patch(frame)
-    ax.text(0.5, 0.975,
+    ax.text(0.5, 0.967,
             "Docker Container  ·  Apache Airflow 2.6.1  ·  Python 3.7",
             ha="center", va="center", fontsize=10.5,
             color=BLU, fontweight="bold")
@@ -111,9 +111,9 @@ def draw_architecture():
                "monitoring_backfill", "visualise"]
     task_xs = [0.17, 0.34, 0.51, 0.70, 0.88]
     for tx, tl in zip(task_xs, tasks):
-        ax.text(tx, 0.945, tl, ha="center", va="center",
+        ax.text(tx, 0.910, tl, ha="center", va="center",
                 fontsize=7.5, color=GRY, fontstyle="italic")
-    ax.axhline(0.932, xmin=0.03, xmax=0.97, color=GRYL, lw=1.0)
+    ax.axhline(0.898, xmin=0.03, xmax=0.97, color=GRYL, lw=1.0)
 
     # ── Row 1: Raw data sources ────────────────────────────────────────────────
     y_s = 0.865
@@ -145,7 +145,7 @@ def draw_architecture():
     y_g = 0.502
     _box(ax, 0.22, y_g, 0.27, 0.068,
          "label_store/",
-         "dpd≥30 @ mob=6  |  ~375 rows/month",
+         "dpd≥30 @ mob=6  |  ~499 rows/month (matured)",
          fill=GRN, fs=8.5)
     _box(ax, 0.50, y_g, 0.22, 0.068,
          "feature_store/eng/",
@@ -278,7 +278,7 @@ def draw_medallion():
         (GRN, "GOLD", [
             "label_store/",
             "  mob=6 rows  |  dpd≥30 → label=1",
-            "  ~375 labelled customers / month",
+            "  ~499 per matured month (18 of 24)",
             "",
             "feature_store/eng/",
             "  6-month fe_1 rollup",
@@ -464,26 +464,25 @@ def draw_model_selection():
     ax.text(x[0] + w, oot[0] + 0.026, "SELECTED",
             ha="center", fontsize=8.5, color=GRN, fontweight="bold")
 
-    # overfit gap annotation
+    # overfit gap annotation — text boxes to the right of each group (no arrow/label collision)
     for i, (tr, ot, gap) in enumerate(zip(train, oot, gaps)):
         col = RED if gap > 0.05 else GRN
-        mid_y = (tr + ot) / 2
-        ax.annotate(
-            f"gap = +{gap:.3f}",
-            xy=(x[i] - w, tr + 0.003),
-            xytext=(x[i] - w + 0.50, tr + 0.025 + i * 0.015),
-            fontsize=7.8, color=col, ha="left", va="center",
-            arrowprops=dict(arrowstyle="-", color=GRYL, lw=0.8),
-        )
+        ax.text(x[i] + w + 0.10, (tr + ot) / 2,
+                f"gap\n+{gap:.3f}",
+                fontsize=7.8, color=col, ha="left", va="center",
+                fontweight="bold",
+                bbox=dict(boxstyle="round,pad=0.18", facecolor=WHT,
+                          edgecolor=col, linewidth=0.9, alpha=0.92))
 
     ax.axhline(0.5, color=GRY, lw=1.0, linestyle=":", alpha=0.5)
-    ax.text(2.52, 0.503, "Random (AUC = 0.50)",
+    ax.text(0.03, 0.503, "Random (AUC = 0.50)",
             fontsize=8, color=GRY, va="bottom")
 
     ax.set_xticks(x)
     ax.set_xticklabels(models, fontsize=12.5)
     ax.set_ylabel("AUC Score", fontsize=12)
-    ax.set_ylim(0.46, 0.85)
+    ax.set_ylim(0.46, 0.87)
+    ax.set_xlim(-0.55, 3.05)
     ax.set_title(
         "Model Selection — Train / Test / OOT AUC\n"
         "LR wins: smallest overfit gap (train−OOT = +0.026) vs RF (+0.174) and XGBoost (+0.130)",
@@ -563,6 +562,17 @@ def reexport_monitoring():
                     pv["psi"].clip(lower=0.25), 0.25,
                     where=(pv["psi"] > 0.25),
                     alpha=0.13, color=RED)
+
+    # annotate maximum PSI value
+    max_row = pv.loc[pv["psi"].idxmax()]
+    ax.annotate(
+        f"max PSI = {max_row['psi']:.4f}\n({pd.Timestamp(max_row['snapshot_date']).strftime('%Y-%m-%d')})",
+        xy=(max_row["snapshot_date"], float(max_row["psi"])),
+        xytext=(max_row["snapshot_date"], 0.032),
+        ha="center", fontsize=8.5, color=PUR, fontweight="bold",
+        arrowprops=dict(arrowstyle="->", color=PUR, lw=1.0),
+    )
+
     ax.set_title("Score Distribution Stability Over Time (PSI)",
                  fontsize=14, fontweight="bold")
     ax.set_xlabel("Snapshot Date", fontsize=12)
@@ -612,6 +622,16 @@ def reexport_monitoring():
     om = df["mean_pred"].mean()
     ax.axhline(om, linestyle=":", color=GRY, lw=1.5,
                label=f"Overall mean = {om:.4f}")
+    # widen y-axis so the near-flat line isn't exaggerated by auto-scaling
+    ax.set_ylim(0.45, 0.53)
+    # annotate total range to make stability explicit
+    pred_range = df["mean_pred"].max() - df["mean_pred"].min()
+    ax.text(0.99, 0.97,
+            f"Total range = {pred_range:.4f}  (negligible drift)",
+            transform=ax.transAxes, fontsize=9.5, color="#2C7A7B",
+            ha="right", va="top", fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor=ORGL,
+                      edgecolor=ORG, alpha=0.85))
     ax.set_title("Score Drift: Mean Predicted Probability Over Time",
                  fontsize=14, fontweight="bold")
     ax.set_xlabel("Snapshot Date", fontsize=12)

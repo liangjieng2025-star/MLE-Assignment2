@@ -76,7 +76,7 @@ loan_id    Customer_ID  label  label_def    snapshot_date
 L0001234   CUS1234      1      30dpd_6mob   2023-01-01
 ```
 
-Each monthly partition holds roughly **375 labelled customers** — those whose sixth instalment falls in that snapshot month.
+Each monthly partition holds roughly **499 labelled customers** per matured month — those whose sixth instalment falls in that snapshot month. The first 6 partitions (Jan–Jun 2023) contain pre-2023 loan cohorts not represented in the clickstream, so those months contribute 0 to the monitoring inner join (see Task 4).
 
 **GOLD layer — feature stores** (built but not used by the model):
 - `datamart/gold/feature_store/eng/` — 6-month rolling clickstream history (`click_1m..click_6m`)
@@ -157,7 +157,7 @@ The score is a probability between 0 and 1. Higher = more likely to default.
 
 **Does — PSI (stability):** Compares the current month's score distribution against the reference month (2023-01-01). Uses 10 equal-frequency bins defined from the reference population, then measures how much the current distribution has shifted using the standard PSI formula: `Σ (P_current − P_ref) × ln(P_current / P_ref)`. Thresholds: PSI < 0.10 = stable, 0.10–0.25 = watch, > 0.25 = investigate.
 
-**Does — AUC/Gini (performance):** Inner-joins predictions to labels. Only the ~375 customers with a mob=6 label in that month contribute. Computes `roc_auc_score` on those customers. `gini = 2 × AUC − 1`. If only one class is present (all good or all bad), AUC is null.
+**Does — AUC/Gini (performance):** Inner-joins predictions to labels. Only the ~499 customers with a mob=6 label in that month contribute (per matured month; the first 6 months yield n_labeled=0 because those early loan cohorts are not in the clickstream). Computes `roc_auc_score` on those customers. `gini = 2 × AUC − 1`. If only one class is present (all good or all bad), AUC is null.
 
 **Writes:** One plain Parquet file per month:
 ```
@@ -170,7 +170,7 @@ datamart/gold/model_monitoring/credit_model_2024_09_01/
 A monitoring row:
 ```
 snapshot_date  model_name                n_scored  mean_pred  psi     n_labeled  actual_bad_rate  auc     gini
-2023-09-01     credit_model_2024_09_01  8974      0.2813     0.0031  375        0.280            0.712   0.425
+2023-09-01     credit_model_2024_09_01  8974      0.4862     0.0031  499        0.280            0.712   0.425
 ```
 
 ---
@@ -289,7 +289,7 @@ OOT AUC is used as the selection criterion because it is the only metric not tai
 
 ### 8. Monitoring split into performance (AUC where labels exist) and stability (PSI)
 
-**Chosen:** PSI is computed for all ~8,974 scored customers per month. AUC is computed only for the ~375 customers who have mob=6 labels that month.
+**Chosen:** PSI is computed for all ~8,974 scored customers per month. AUC is computed only for the ~499 customers who have mob=6 labels that month (per matured month).
 
 **Why two metrics:** PSI measures whether the score distribution has shifted. AUC measures whether the scores still correctly rank borrowers. These are independent failure modes. A model could maintain stable PSI while its discriminating power collapses (e.g., if the bad-rate drops but all customers' scores drop uniformly). You need AUC to confirm discrimination is intact.
 
@@ -323,7 +323,7 @@ OOT AUC is used as the selection criterion because it is the only metric not tai
 
 **Caveat:** `class_weight='balanced'` adjusts the **decision boundary** but does not calibrate **predicted probabilities**. The `predict_proba` output is shifted upward for the positive class. The model's scores do not directly equal the true default probability. For expected-loss calculations (PD × LGD × EAD), a Platt scaling step would be needed.
 
-**AUC is still valid:** AUC is a rank-order metric that doesn't depend on calibration. All monitoring AUC values are correct. But `mean_pred` (~0.28) should not be read as "28% of customers will default" without calibration verification.
+**AUC is still valid:** AUC is a rank-order metric that doesn't depend on calibration. All monitoring AUC values are correct. But `mean_pred` (~0.485) should not be read as "48.5% of customers will default" — `class_weight='balanced'` pushes predicted probabilities well above the ~28% base rate, which is exactly why calibration is needed before using scores as literal default probabilities.
 
 **Defence:** "Balanced class weighting ensures the minority class has adequate influence during training. AUC is rank-order and unaffected. Probability calibration would be needed before using these scores as literal default probabilities in a credit loss model."
 
@@ -399,11 +399,11 @@ Two triggers: (1) Performance — AUC drops below 0.60 on a rolling 3-month wind
 
 **Q5: Why does PSI stay so low (< 0.01) across all 24 months?**
 
-The clickstream features (fe_1..fe_20) come from the same underlying customer population each month. The model is a fixed linear transformation of those features with a fixed scaler. Since neither the population nor the model weights change, the score distribution is extremely stable. This is the expected behaviour for a well-calibrated batch-scoring system on a stable population. PSI would spike if a marketing campaign brought in a different customer segment, or if the model were retrained with substantially different weights.
+The clickstream features (fe_1..fe_20) come from the same underlying customer population each month. The model is a fixed linear transformation of those features with a fixed scaler. Since neither the population nor the model weights change, the score distribution is extremely stable. This is the expected behaviour for a stable batch-scoring system on a consistent population. PSI would spike if a marketing campaign brought in a different customer segment, or if the model were retrained with substantially different weights.
 
 **Q6: What's the difference between n_scored and n_labeled in your monitoring table?**
 
-`n_scored` ≈ 8,974: every customer in the clickstream for that month, scored regardless of whether we have labels for them. `n_labeled` ≈ 375: the subset whose sixth loan instalment falls in that exact snapshot month, giving us ground truth labels. AUC is computed only on those 375. In a live deployment you would only have labels for customers who entered the loan book 6 months prior, so `n_labeled` would be 0 for the most recent months until labels mature.
+`n_scored` ≈ 8,974: every customer in the clickstream for that month, scored regardless of whether we have labels for them. `n_labeled` ≈ 499 per matured month: the subset whose sixth loan instalment falls in that exact snapshot month, giving us ground truth labels. AUC is computed only on those ~499. The first 6 months of the backfill have n_labeled=0 because those loan cohorts (started mid-2022) are not represented in the clickstream data. In a live deployment you would only have labels for customers who entered the loan book 6 months prior, so `n_labeled` would be 0 for the most recent months until labels mature.
 
 **Q7: Your features are at mob=6, not at application time. Isn't that a problem?**
 

@@ -116,7 +116,7 @@ def draw_architecture():
     ax.axhline(0.898, xmin=0.03, xmax=0.97, color=GRYL, lw=1.0)
 
     # ── Row 1: Raw data sources ────────────────────────────────────────────────
-    y_s = 0.865
+    y_s = 0.825
     srcs = [
         ("lms_loan_daily.csv", "daily loan records"),
         ("feature_clickstream.csv", "fe_1..fe_20 signals"),
@@ -128,21 +128,21 @@ def draw_architecture():
         _box(ax, sx, y_s, 0.20, 0.065, s, d, fill="#4A5568", fs=8.2)
 
     # ── Row 2: Bronze ─────────────────────────────────────────────────────────
-    y_b = 0.748
+    y_b = 0.708
     _box(ax, 0.50, y_b, 0.88, 0.068,
          "BRONZE  (datamart/bronze/)",
          "Partitioned CSVs  ·  no cleaning  ·  96 files  (24 months × 4 sources)",
          fill="#B7791F", fs=9.5)
 
     # ── Row 3: Silver ─────────────────────────────────────────────────────────
-    y_sil = 0.625
+    y_sil = 0.585
     _box(ax, 0.50, y_sil, 0.88, 0.068,
          "SILVER  (datamart/silver/)",
          "Type-cast  ·  +mob +dpd (LMS)  ·  negatives→null (fin)  ·  Parquet  ·  96 files",
          fill="#4A5568", fs=9.5)
 
     # ── Row 4: Gold layer (3 stores) ──────────────────────────────────────────
-    y_g = 0.502
+    y_g = 0.462
     _box(ax, 0.22, y_g, 0.27, 0.068,
          "label_store/",
          "dpd≥30 @ mob=6  |  ~499 rows/month (matured)",
@@ -157,7 +157,7 @@ def draw_architecture():
          fill="#2F855A", fs=8.5)
 
     # ── Row 5: Train + model bank ─────────────────────────────────────────────
-    y_t = 0.365
+    y_t = 0.325
     _box(ax, 0.27, y_t, 0.35, 0.075,
          "model_train.py",
          "LR · RF · XGBoost  →  winner by OOT AUC",
@@ -168,7 +168,7 @@ def draw_architecture():
          fill=BLUM, fs=8.8)
 
     # ── Row 6: Inference + Monitoring ─────────────────────────────────────────
-    y_i = 0.225
+    y_i = 0.185
     _box(ax, 0.27, y_i, 0.35, 0.072,
          "model_inference.py  (×24)",
          "scores ~8,974 customers / month",
@@ -179,7 +179,7 @@ def draw_architecture():
          fill="#2A4365", fs=9)
 
     # ── Row 7: Output gold tables ─────────────────────────────────────────────
-    y_o = 0.09
+    y_o = 0.050
     _box(ax, 0.27, y_o, 0.35, 0.060,
          "gold/model_predictions/  (24 parquets)", None,
          fill="#1A365D", fs=8.5)
@@ -475,7 +475,7 @@ def draw_model_selection():
                           edgecolor=col, linewidth=0.9, alpha=0.92))
 
     ax.axhline(0.5, color=GRY, lw=1.0, linestyle=":", alpha=0.5)
-    ax.text(0.03, 0.503, "Random (AUC = 0.50)",
+    ax.text(-0.48, 0.503, "Random (AUC = 0.50)",
             fontsize=8, color=GRY, va="bottom")
 
     ax.set_xticks(x)

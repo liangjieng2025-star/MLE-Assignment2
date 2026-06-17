@@ -76,7 +76,7 @@ loan_id    Customer_ID  label  label_def    snapshot_date
 L0001234   CUS1234      1      30dpd_6mob   2023-01-01
 ```
 
-Each monthly partition holds roughly **499 labelled customers** per matured month — those whose sixth instalment falls in that snapshot month. The first 6 partitions (Jan–Jun 2023) contain pre-2023 loan cohorts not represented in the clickstream, so those months contribute 0 to the monitoring inner join (see Task 4).
+Each monthly partition holds roughly **499 labelled customers** per matured month — those whose sixth instalment falls in that snapshot month. The label store for Jan–Jun 2023 is empty because all loans in the dataset originated at installment_num=0 in January 2023; mob=6 requires 6 months to mature, so the first labels appear in July 2023.
 
 **GOLD layer — feature stores** (built but not used by the model):
 - `datamart/gold/feature_store/eng/` — 6-month rolling clickstream history (`click_1m..click_6m`)
@@ -157,7 +157,7 @@ The score is a probability between 0 and 1. Higher = more likely to default.
 
 **Does — PSI (stability):** Compares the current month's score distribution against the reference month (2023-01-01). Uses 10 equal-frequency bins defined from the reference population, then measures how much the current distribution has shifted using the standard PSI formula: `Σ (P_current − P_ref) × ln(P_current / P_ref)`. Thresholds: PSI < 0.10 = stable, 0.10–0.25 = watch, > 0.25 = investigate.
 
-**Does — AUC/Gini (performance):** Inner-joins predictions to labels. Only the ~499 customers with a mob=6 label in that month contribute (per matured month; the first 6 months yield n_labeled=0 because those early loan cohorts are not in the clickstream). Computes `roc_auc_score` on those customers. `gini = 2 × AUC − 1`. If only one class is present (all good or all bad), AUC is null.
+**Does — AUC/Gini (performance):** Inner-joins predictions to labels. Only the ~499 customers with a mob=6 label in that month contribute (per matured month). The first 6 months yield n_labeled=0 because all loans originated in January 2023 — mob=6 simply has not matured yet for those snapshots. Computes `roc_auc_score` on those customers. `gini = 2 × AUC − 1`. If only one class is present (all good or all bad), AUC is null.
 
 **Writes:** One plain Parquet file per month:
 ```
@@ -226,7 +226,7 @@ Each decision below states: what we chose, why, what the alternatives were, and 
 
 **Why:** Our 12-month window, anchored at the 2024-09-01 training date, naturally starts at 2023-07-01. The months before that are left as background history.
 
-**Impact:** Approximately 2,250 additional rows (~6 × 375) are excluded. Small relative to 4,766 training rows.
+**Impact:** The label store for those 6 months is empty (all loans originated Jan 2023 at installment_num=0; mob=6 had not yet matured), so there are no rows to exclude — the window choice has no practical cost here.
 
 **Defence:** "A fixed-window convention is reproducible and clean. In a rolling production system, those 6 months would be incorporated as the window advances monthly. The omission costs less than 1 AUC point."
 
@@ -403,7 +403,7 @@ The clickstream features (fe_1..fe_20) come from the same underlying customer po
 
 **Q6: What's the difference between n_scored and n_labeled in your monitoring table?**
 
-`n_scored` ≈ 8,974: every customer in the clickstream for that month, scored regardless of whether we have labels for them. `n_labeled` ≈ 499 per matured month: the subset whose sixth loan instalment falls in that exact snapshot month, giving us ground truth labels. AUC is computed only on those ~499. The first 6 months of the backfill have n_labeled=0 because those loan cohorts (started mid-2022) are not represented in the clickstream data. In a live deployment you would only have labels for customers who entered the loan book 6 months prior, so `n_labeled` would be 0 for the most recent months until labels mature.
+`n_scored` ≈ 8,974: every customer in the clickstream for that month, scored regardless of whether we have labels for them. `n_labeled` ≈ 499 per matured month: the subset whose sixth loan instalment falls in that exact snapshot month, giving us ground truth labels. AUC is computed only on those ~499. The first 6 months (Jan–Jun 2023) have n_labeled=0 because all loans in this dataset originated in January 2023 at installment_num=0 — mob=6 has simply not matured yet for those snapshots. In a live deployment you would only have labels for customers who entered the loan book 6 months prior, so `n_labeled` would be 0 for the most recent months until labels mature.
 
 **Q7: Your features are at mob=6, not at application time. Isn't that a problem?**
 

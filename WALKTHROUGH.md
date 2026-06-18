@@ -76,7 +76,7 @@ loan_id    Customer_ID  label  label_def    snapshot_date
 L0001234   CUS1234      1      30dpd_6mob   2023-01-01
 ```
 
-Each monthly partition holds roughly **499 labelled customers** per matured month — those whose sixth instalment falls in that snapshot month. The label store for Jan–Jun 2023 is empty because all loans in the dataset originated at installment_num=0 in January 2023; mob=6 requires 6 months to mature, so the first labels appear in July 2023.
+Each monthly partition holds roughly **499 labelled customers** per matured month — those whose sixth instalment falls in that snapshot month. The count equals the origination cohort from 6 months prior (e.g. Jul 2023 = 530, matching the 530 new loans that originated in Jan 2023). The label store for Jan–Jun 2023 is empty because loans originate in monthly cohorts starting January 2023; no cohort existed before that month to have reached mob=6.
 
 **GOLD layer — feature stores** (built but not used by the model):
 - `datamart/gold/feature_store/eng/` — 6-month rolling clickstream history (`click_1m..click_6m`)
@@ -157,7 +157,7 @@ The score is a probability between 0 and 1. Higher = more likely to default.
 
 **Does — PSI (stability):** Compares the current month's score distribution against the reference month (2023-01-01). Uses 10 equal-frequency bins defined from the reference population, then measures how much the current distribution has shifted using the standard PSI formula: `Σ (P_current − P_ref) × ln(P_current / P_ref)`. Thresholds: PSI < 0.10 = stable, 0.10–0.25 = watch, > 0.25 = investigate.
 
-**Does — AUC/Gini (performance):** Inner-joins predictions to labels. Only the ~499 customers with a mob=6 label in that month contribute (per matured month). The first 6 months yield n_labeled=0 because all loans originated in January 2023 — mob=6 simply has not matured yet for those snapshots. Computes `roc_auc_score` on those customers. `gini = 2 × AUC − 1`. If only one class is present (all good or all bad), AUC is null.
+**Does — AUC/Gini (performance):** Inner-joins predictions to labels. Only the ~499 customers with a mob=6 label in that month contribute (per matured month). The first 6 months yield n_labeled=0 because January 2023 is the earliest origination cohort in the LMS dataset; that cohort first reaches mob=6 in July 2023 and no prior cohort exists. Computes `roc_auc_score` on those customers. `gini = 2 × AUC − 1`. If only one class is present (all good or all bad), AUC is null.
 
 **Writes:** One plain Parquet file per month:
 ```
@@ -170,7 +170,7 @@ datamart/gold/model_monitoring/credit_model_2024_09_01/
 A monitoring row:
 ```
 snapshot_date  model_name                n_scored  mean_pred  psi     n_labeled  actual_bad_rate  auc     gini
-2023-09-01     credit_model_2024_09_01  8974      0.4862     0.0031  499        0.280            0.712   0.425
+2023-09-01     credit_model_2024_09_01  8974      0.4862     0.0022  499        0.280            0.663   0.326
 ```
 
 ---
@@ -226,9 +226,9 @@ Each decision below states: what we chose, why, what the alternatives were, and 
 
 **Why:** Our 12-month window, anchored at the 2024-09-01 training date, naturally starts at 2023-07-01. The months before that are left as background history.
 
-**Impact:** The label store for those 6 months is empty (all loans originated Jan 2023 at installment_num=0; mob=6 had not yet matured), so there are no rows to exclude — the window choice has no practical cost here.
+**Impact:** The label store for those 6 months is empty — loans originate in monthly cohorts from January 2023 onwards, and no cohort existed before that month to have reached mob=6. There are no rows to exclude and the window choice has no practical cost.
 
-**Defence:** "A fixed-window convention is reproducible and clean. In a rolling production system, those 6 months would be incorporated as the window advances monthly. The omission costs less than 1 AUC point."
+**Defence:** "A fixed-window convention is reproducible and clean. Those six months contain no labelled data by construction, so the window choice excludes nothing and costs nothing in model quality."
 
 ---
 
@@ -278,7 +278,7 @@ Each decision below states: what we chose, why, what the alternatives were, and 
 **The honest picture:** The OOT AUC differences are tiny — 0.6297 vs 0.6265 vs 0.6140. No statistical test would call LR a clear winner on discrimination alone. The real case for LR is:
 
 - **Overfit gap:** LR train→OOT drop = **0.026 AUC points**. RF drop = 0.174. XGBoost drop = 0.130. Tree models are memorising the training data — their training AUC (0.79, 0.76) is not real.
-- **Deployment stability:** In 24 months of live monitoring, LR's AUC standard deviation is 0.028. XGBoost's is 0.055. LR is more predictable month-to-month.
+- **Deployment stability:** In 24 months of live monitoring, LR's AUC standard deviation is 0.028 (mean 0.647 across 18 matured months). Only the selected model is monitored in production; no equivalent monitoring data exists for XGBoost or RF. The 13-point train-to-OOT drop for XGBoost strongly suggests its in-sample stability would not hold in live deployment.
 - **Parsimony:** A logistic regression is interpretable, fast to retrain (seconds vs minutes), and its coefficients can be inspected to explain why a customer received a high score.
 
 OOT AUC is used as the selection criterion because it is the only metric not tainted by in-sample overfitting. But the argument for LR is really about **stability and generalisation**, not a 0.003 AUC edge.
@@ -373,7 +373,7 @@ OOT AUC is used as the selection criterion because it is the only metric not tai
 
 **5. Hardcoded outlier caps in silver financials:** `Num_of_Loan ≤ 9`, `Interest_Rate ≤ 34`, etc. are fixed values from Assignment 1 EDA. They don't adapt to population drift. Not relevant for the current clickstream model, but would need data-driven capping if financial features were adopted.
 
-**6. Unused Jan–Jun 2023 history (~2,250 rows):** Small impact, easy to fix by extending the training window.
+**6. No labelled history before July 2023:** The LMS dataset begins in January 2023, so the first origination cohort reaches mob=6 in July 2023. The six earlier monthly snapshots contain no mob=6 observations — there is no unused data to recover by extending the training window.
 
 **7. No probability calibration:** `class_weight='balanced'` shifts predicted probabilities upward. Scores cannot be interpreted as literal default rates without a calibration step.
 
@@ -391,7 +391,7 @@ Three safeguards: (1) The OOT set is carved out by time before any random split 
 
 **Q3: Why did you choose Logistic Regression over XGBoost? XGBoost is usually better.**
 
-The OOT AUC difference (0.6297 vs 0.6265) is within noise — no statistical test would call this significant. The case for LR is the overfit gap: LR's train-to-OOT drop is 2.6 AUC points versus 13.0 for XGBoost. XGBoost memorised the training data (train AUC 0.76 vs OOT 0.63 is a 13-point gap). In 24 months of live monitoring, LR's AUC standard deviation is 0.028 versus XGBoost's 0.055. A stable, interpretable 0.63 beats an unstable 0.76 train AUC that decays in production.
+The OOT AUC difference (0.6297 vs 0.6265) is within noise — no statistical test would call this significant. The case for LR is the overfit gap: LR's train-to-OOT drop is 2.6 AUC points versus 13.0 for XGBoost. XGBoost memorised the training data (train AUC 0.76 vs OOT 0.63 is a 13-point gap). In 24 months of live monitoring, LR's AUC standard deviation is 0.028 (mean 0.647, 18 matured months). Only the selected model is tracked in production — no equivalent monitoring data exists for XGBoost. A stable, interpretable 0.63 beats a training-inflated 0.76 that decays sharply on out-of-sample data.
 
 **Q4: What would trigger a model refresh?**
 
@@ -403,7 +403,7 @@ The clickstream features (fe_1..fe_20) come from the same underlying customer po
 
 **Q6: What's the difference between n_scored and n_labeled in your monitoring table?**
 
-`n_scored` ≈ 8,974: every customer in the clickstream for that month, scored regardless of whether we have labels for them. `n_labeled` ≈ 499 per matured month: the subset whose sixth loan instalment falls in that exact snapshot month, giving us ground truth labels. AUC is computed only on those ~499. The first 6 months (Jan–Jun 2023) have n_labeled=0 because all loans in this dataset originated in January 2023 at installment_num=0 — mob=6 has simply not matured yet for those snapshots. In a live deployment you would only have labels for customers who entered the loan book 6 months prior, so `n_labeled` would be 0 for the most recent months until labels mature.
+`n_scored` ≈ 8,974: every customer in the clickstream for that month, scored regardless of whether we have labels for them. `n_labeled` ≈ 499 per matured month: the subset whose sixth loan instalment falls in that exact snapshot month — this equals the origination cohort from 6 months earlier (e.g. Jul 2023 n_labeled=530, matching the 530 loans that originated Jan 2023). AUC is computed only on those ~499. The first 6 months (Jan–Jun 2023) have n_labeled=0 because loans originate in monthly cohorts from January 2023 onwards; no prior cohort existed to have reached mob=6 before July 2023. In a live deployment you would only have labels for customers who entered the loan book 6 months prior, so `n_labeled` would be 0 for the most recent months until labels mature.
 
 **Q7: Your features are at mob=6, not at application time. Isn't that a problem?**
 

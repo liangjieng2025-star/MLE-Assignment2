@@ -16,6 +16,19 @@ fernet_key.txt
 CLAUDE.md
 .claude/
 
+# --- Docs / walkthrough (kept on disk for submission zip; not for git) ---
+WALKTHROUGH.md
+Assignment 2.pdf
+
+# --- Debug / scratch scripts (not part of the pipeline) ---
+scripts/investigate.py
+scripts/investigate_host.py
+scripts/print_monitoring_table.py
+scripts/verify_outputs.py
+
+# --- Large notebooks (exploratory only; 21 MB) ---
+notebooks/exploratory_data_analysis.ipynb
+
 # --- Old A1 reference folders (data CSVs, classmate PDFs, duplicate code) ---
 Data Pipeline/
 ML Pipeline/
